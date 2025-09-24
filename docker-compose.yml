@@ -1,0 +1,97 @@
+# docker-compose.yml
+# Complete orchestration for MySQL, MongoDB, and Node.js application
+
+services:
+  # MySQL Database Service
+  mysql:
+    image: mysql:8.0
+    container_name: social-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: SecureRootPassword123!
+      MYSQL_DATABASE: social_hybrid
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: SecureAppPassword123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql_setup.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pSecureRootPassword123!"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - social_network
+
+  # MongoDB Database Service  
+  mongo:
+    image: mongo:6.0
+    container_name: social-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: SecureMongoPassword123!
+      MONGO_INITDB_DATABASE: social_hybrid
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - social_network
+
+  # Node.js Application Service
+  app:
+    build: .
+    container_name: social-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: SecureRootPassword123!
+      MONGO_HOST: mongo
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: SecureMongoPassword123!
+      NODE_ENV: production
+    volumes:
+      - ./logs:/usr/src/app/logs
+    command: >
+      sh -c "
+        echo '🚀 Starting application initialization...' &&
+        echo '⏳ Waiting for databases to be ready...' &&
+        sleep 10 &&
+        echo '📝 Initializing MongoDB...' &&
+        npm run init-mongo &&
+        echo '✅ Initialization completed' &&
+        echo '🎯 Starting main application...' &&
+        npm start
+      "
+    networks:
+      - social_network
+
+# Named volumes for data persistence
+volumes:
+  mysql_data:
+    driver: local
+  mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
+
+# Custom network for service communication
+networks:
+  social_network:
+    driver: bridge
